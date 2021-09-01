@@ -6,63 +6,60 @@ __lua__
 
 -- initialization
 
-tiles = {
-	spawn = 64
-}
+-- todo:
+-- - figure out actor/spawner
+--   relation better
+-- - move movement/collision
+--   code into base actor
+--   table
 
 function _init()
 	-- disable button repeating
 	poke(0x5f5c, 255)
-	load_player()
+	load_room(1)
 end
 
-function load_player()
-	spawn_x, spawn_y = find_spawn()
-	pl = {
-		-- movement state
-		x = spawn_x * 8,
-		y = spawn_y * 8,
-		realx = spawn_x * 8,
-		realy = spawn_y * 8,
-		speedx=0,
-		speedy=0,
-		crouching=false,
-		lookingup=false,
-		-- animation state
-		sprite = 1,
-		flip_x = false,
-		runtimer = 0,
-		yoffset=0,
-		-- constants
-		walkspeed = 1.5,
-		walkaccel = 0.3,
-		airaccel = 0.25,
-		jumpspeed = -3.2,
-		gravity = 0.175,
-		fallspeed = 3,
-		run_animrate = 7,
-		sprites = {
-			stand = 1,
-			walk1 = 1,
-			walk2 = 2,
-			jump = 3,
-			fall = 4,
-			crouch = 5,
-			lookup = 6
-		}
+room_info = {
+	[1] = {
+		x = 0,
+		y = 0,
+		w = 16,
+		h = 16,
+		vertical = false
 	}
-end
+}
 
-function find_spawn()
-	-- todo: don't hardcode bounds
-	for y=0,15 do
-		for x=0,15 do
-			if mget(x, y) == tiles.spawn then				
-				return x, y
-			end
-		end
-	end
-	return 0,0
+function load_room(num)
+ -- reset state
+ actors = {}
+ spawners = {}
+	room = room_info[num]
+	-- find spawners
+	local left = room.x
+	local right = room.w - room.x
+	local top = room.y
+	local bottom = room.h - room.y
+ for y = top, bottom do
+ 	for x = left, right do
+ 		local sprite = mget(x, y)
+ 		if fget(sprite, 0x7) then
+ 			local spawner = 
+ 			 create_spawner(x, y, sprite)
+ 			add(spawners, spawner)
+ 		end
+ 	end
+ end
+ -- spawn initial actors
+ for sp in all(spawners) do
+ 	if sp.x >= left - 2
+ 	 and sp.x <= right + 2
+ 	 and sp.y >= top - 2
+ 	 and sp.y <= bottom + 2
+ 	then
+ 		local actor = sp:spawn()
+ 		add(actors, actor)
+ 	end
+ end
 end
 -->8
 -- rendering
@@ -70,7 +67,9 @@ end
 function _draw()
 	cls()
 	draw_level()
-	draw_player()
+ for actor in all(actors) do
+ 	actor:draw()
+ end
 	-- default orange blends in
 	--pal(9,137,1)
 	-- debug
@@ -97,104 +96,28 @@ function draw_level()
 	end
 	timer += 1]]
 	rectfill(0, 0, 128, 128, 1)
-	map(0, 0, 0, 0, 16, 16, 1)
+	map(0, 0, 0, 0, 16, 16, 0x01)
 end
 
-function draw_player()
-	if not on_floor() then
-		-- in the air
-		pl.sprite = pl.speedy < 0
-		 and pl.sprites.jump 
-		 or pl.sprites.fall
-		pl.runtimer = 0
-		pl.yoffset = 0
-	elseif pl.speedx == 0 then
-		-- standing still
-		if pl.crouching then
-			pl.sprite = pl.sprites.crouch
-		elseif pl.lookingup then
-			pl.sprite = pl.sprites.lookup
-		else
-			pl.sprite = pl.sprites.stand
-		end
-		--pl.sprite = pl.crouching and 3 or 1
-		pl.runtimer = 0
-		pl.yoffset = 0
-	else
-		-- running
-		pl.runtimer += 1 / pl.run_animrate
-		if flr(pl.runtimer) % 2 == 0 then
-			pl.sprite = pl.sprites.walk1
-			pl.yoffset = 0
-		else
-			pl.sprite = pl.sprites.walk2
-			pl.yoffset = -1
-		end
-	end
-	
-	--pal({[9]=12,[3]=2})
-	--spr_outline(pl.sprite, pl.x, pl.y + pl.yoffset, 1, 1, pl.flip_x)
-	spr(pl.sprite, pl.x, pl.y + pl.yoffset, 1, 1, pl.flip_x)
-	
-	--pal()
-end
+
 -->8
 -- update loop
 
-
 function _update60()
-	update_player()
-end
-
-function update_player()
-	-- horizontal movement
-	accel = on_ground()
-	 and pl.walkaccel
-	 or pl.airaccel
-	if both(btn(⬅️),btn(➡️)) then
-		pl.speedx = approach(pl.speedx, 0, accel)
-	elseif btn(⬅️) then
-		pl.speedx = approach(pl.speedx, -pl.walkspeed, accel)
-		if (pl.speedx <= 0) pl.flip_x = true
- elseif btn(➡️) then
-		pl.speedx = approach(pl.speedx, pl.walkspeed, accel)
-		if (pl.speedx >= 0) pl.flip_x = false
-	end
-	
-	pl.crouching = false
-	pl.lookingup = false
-	if (pl.speedx == 0) then
-		if not both(btn(⬇️),btn(⬆️)) then
-			if (btn(⬇️)) pl.crouching = true
-			if (btn(⬆️)) pl.lookingup = true
+	for actor in all(actors) do
+		if actor.update != nil then
+			actor:update()
 		end
 	end
-	
-	pl.speedx = max(min(pl.speedx, pl.walkspeed), -pl.walkspeed)
-	
-	-- vertical movement
-	if pressed(🅾️) and on_floor() then
-		player_jump()
-	end
-	
-	if pl.speedy < 0 and not btn(🅾️) then
-		pl.speedy += pl.gravity * 4
-	else
-		pl.speedy += pl.gravity
-	end
-	pl.speedy = min(pl.speedy, pl.fallspeed)
-	
-	move_player(pl.speedx, pl.speedy)
 end
+
+--function update_player()
+--
+--end
 
 -- will be fancier later?
 function pressed(button)
 	return btnp(button)
-end
-
-function player_jump()
-	sfx(0)
-	pl.speedy = pl.jumpspeed
 end
 
 function move_player(move_x, move_y)
@@ -258,7 +181,7 @@ buttons = {
 	[5]="❎",
 }
 
---
+--[[
 function spr_outline(n,x,y,w,h,flip_x,flip_y)
 	for i = 1,15 do pal(i,0) end
 	pal(0,1)
@@ -301,18 +224,39 @@ end
 -- consistency is cringe
 on_ground = on_floor
 -->8
--- actors
+-- actors and spawners
 
--- global actor list
-actors = {}
+function create_spawner(x, y, id)
+	local spawner = {
+		x = x,
+		y = y,
+		id = id,
+		enabled = true,
+		actor_alive = false,
+		spawn = function(self)
+			return create_actor(
+			 self.x * 8,
+			 self.y * 8,
+			 self.id,
+			 self)
+		end
+	}
+	return spawner
+end
 
--- create actor functions
--- indexed by sprite id
-actor_creators = {
-	[1] = create_player,
+actormeta = {
+	__concat = function(orig, new)
+		for k,v in pairs(new) do
+			orig[k] = v
+		end
+		return orig
+	end
 }
 
-function create_actor(x, y, id)
+function create_actor(x, y, id, spawner)
+ actor_creators = {
+		[1] = create_player,
+	}
 	if actor_creators[id] != nil then
 		return actor_creators[id](x, y)
 	end
@@ -327,6 +271,8 @@ function create_actor(x, y, id)
 		-- hitbox
 		w = 8,
 		h = 8,
+		-- spawn state
+		spawner = spawner,
 		-- sprite
 		sprite = 0,
 		flipx = false,
@@ -336,24 +282,137 @@ function create_actor(x, y, id)
 		-- methods
 		--function _init(self) end
 		--function _update(self) end
-		--function _render(self) end
+		--function _draw(self) end
 	}
-	actors.insert(actor)
+	setmetatable(actor, actormeta)
 	return actor
 end
 
-function create_player()
-	
+
+-->8
+-- player definition
+
+function create_player(x, y)
+	pl = create_actor(x, y)	
+	pl = pl .. {
+		crouching=false,
+		lookingup=false,
+		-- animation state
+		sprite = 1,
+		runtimer = 0,
+		-- constants
+		walkspeed = 1.5,
+		walkaccel = 0.3,
+		airaccel = 0.25,
+		jumpspeed = -3.2,
+		gravity = 0.175,
+		fallspeed = 3,
+		run_animrate = 7,
+		sprites = {
+			stand = 1,
+			walk1 = 1,
+			walk2 = 2,
+			jump = 3,
+			fall = 4,
+			crouch = 5,
+			lookup = 6
+		},
+		-- update methods
+		update = function(self)
+			-- horizontal inputs
+			accel = on_ground()
+			 and self.walkaccel
+			 or self.airaccel
+			if both(btn(⬅️),btn(➡️)) then
+				self.speedx = approach(self.speedx, 0, accel)
+			elseif btn(⬅️) then
+				self.speedx = approach(self.speedx, -self.walkspeed, accel)
+				if (self.speedx <= 0) self.flipx = true
+		 elseif btn(➡️) then
+				self.speedx = approach(self.speedx, self.walkspeed, accel)
+				if (self.speedx >= 0) self.flipx = false
+			end
+			-- vertical inputs
+			self.crouching = false
+			self.lookingup = false
+			if (self.speedx == 0) then
+				if not both(btn(⬇️),btn(⬆️)) then
+					if (btn(⬇️)) self.crouching = true
+					if (btn(⬆️)) self.lookingup = true
+				end
+			end
+			self.speedx = max(min(self.speedx, self.walkspeed), -self.walkspeed)
+			-- vertical movement
+			if pressed(🅾️) and on_floor() then
+				self:jump()
+			end
+			
+			if self.speedy < 0 and not btn(🅾️) then
+				self.speedy += self.gravity * 4
+			else
+				self.speedy += self.gravity
+			end
+			self.speedy = min(self.speedy, self.fallspeed)
+			
+			move_player(self.speedx, self.speedy)
+		end,
+		
+		jump = function(self)
+			sfx(0)
+			self.speedy = self.jumpspeed
+		end,
+		
+		-- rendering code
+		draw = function(self)
+			if not on_floor() then
+				-- in the air
+				self.sprite = self.speedy < 0
+				 and self.sprites.jump 
+				 or self.sprites.fall
+				self.runtimer = 0
+				self.yoffset = 0
+			elseif self.speedx == 0 then
+				-- standing still
+				if self.crouching then
+					self.sprite = self.sprites.crouch
+				elseif self.lookingup then
+					self.sprite = self.sprites.lookup
+				else
+					self.sprite = self.sprites.stand
+				end
+				--self.sprite = self.crouching and 3 or 1
+				self.runtimer = 0
+				self.yoffset = 0
+			else
+				-- running
+				self.runtimer += 1 / self.run_animrate
+				if flr(self.runtimer) % 2 == 0 then
+					self.sprite = self.sprites.walk1
+					self.yoffset = 0
+				else
+					self.sprite = self.sprites.walk2
+					self.yoffset = -1
+				end
+			end
+			
+			--pal({[9]=12,[3]=2})
+			--spr_outline(self.sprite, self.x, self.y + self.yoffset, 1, 1, self.flip_x)
+			spr(self.sprite, self.x, self.y + self.yoffset, 1, 1, self.flipx)
+			
+			--pal()
+		end
+	}
+	return pl
 end
 __gfx__
 00000000000900900009009000900900000900900000000000900900000000000000000000000000000000000000000000000000000000000000000000000000
-00000000000999900009999000093930700999900009009000093930000000000000000000000000000000000000000000000000000000000000000000000000
-00700700790939307909393000099995790939300009999000099995000000000000000000000000000000000000000000000000000000000000000000000000
-00077000790999957909999509099990090999950009393079099990000000000000000000000000000000000000000000000000000000000000000000000000
-00077000009999900099999079999900009999907909999579999900000000000000000000000000000000000000000000000000000000000000000000000000
-00700700009999000099990070999900009999007999999000999900000000000000000000000000000000000000000000000000000000000000000000000000
-00000000009009000090090000900900009009000099990000900900000000000000000000000000000000000000000000000000000000000000000000000000
-00000000007007000700007007007000070000700070070000700700000000000000000000000000000000000000000000000000000000000000000000000000
+00000000000999900009999000093930700999900009009000093930008888000000000000000000000000000000000000000000000000000000000000000000
+00700700790939307909393000099995790939300009999000099995088888800088880000000000000000000000000000000000000000000000000000000000
+00077000790999957909999509099990090999950009393079099990808088880888888000000000000000000000000000000000000000000000000000000000
+00077000009999900099999079999900009999907909999579999900808088888080888800000000000000000000000000000000000000000000000000000000
+00700700009999000099990070999900009999007999999000999900888888888080888800000000000000000000000000000000000000000000000000000000
+00000000009009000090090000900900009009000099990000900900888888888888888800000000000000000000000000000000000000000000000000000000
+00000000007007000700007007007000070000700070070000700700088888800888888000000000000000000000000000000000000000000000000000000000
 bbbbbbbbbbbbbbbbbbbbbbbb4444444444444444bbbbbbbbbbbbbbbb000000000000000000000000000000000000000000000000000000000000000000000000
 bbbbbbbbbbbbbbbbbbbbbbbb4444444444444444bbbbbbbbbbbbbbbb000000000000000000000000000000000000000000000000000000000000000000000000
 bb44444444444444444444bb4444444444444444bb444444bb4444bb000000000000000000000000000000000000000000000000000000000000000000000000
@@ -387,7 +446,7 @@ bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb4444bb00000000000000000000000000000000
 00400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 00400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __gff__
-0101010101010101010101010101010103030303030303010101010101010101030303030303030101010101010101010303030303030101010101010101010100010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101
+0180010101010101010101010101010103030303030303010101010101010101030303030303030101010101010101010303030303030101010101010101010100010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101010101
 0000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __map__
 1331313131313131313131313131311400000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
@@ -404,7 +463,7 @@ __map__
 2200000000000000000000000000002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 2200000000000000000000001012002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 2200001534260000003300002022002000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
-2200400000000000330000102422000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
+2200010000000000330000102422000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 2311111111111111111111242123111111111111111111111111000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000
 __sfx__
 000100001a0501c0501e0502005022050230402303024030250302603028030290202a0202b0202b0102c0102c0102d0102d0102e0102e0102e0002e0002e0002f0002e0002e0002e0002e0002e0002e0002e000
