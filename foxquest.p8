@@ -9,9 +9,6 @@ __lua__
 -- todo:
 -- - figure out actor/spawner
 --   relation better
--- - move movement/collision
---   code into base actor
---   table
 
 function _init()
 	-- disable button repeating
@@ -44,7 +41,7 @@ function load_room(num)
  		local sprite = mget(x, y)
  		if fget(sprite, 0x7) then
  			local spawner = 
- 			 create_spawner(x, y, sprite)
+ 				create_spawner(x, y, sprite)
  			add(spawners, spawner)
  		end
  	end
@@ -52,9 +49,9 @@ function load_room(num)
  -- spawn initial actors
  for sp in all(spawners) do
  	if sp.x >= left - 2
- 	 and sp.x <= right + 2
- 	 and sp.y >= top - 2
- 	 and sp.y <= bottom + 2
+		and sp.x <= right + 2
+		and sp.y >= top - 2
+		and sp.y <= bottom + 2
  	then
  		local actor = sp:spawn()
  		add(actors, actor)
@@ -78,7 +75,7 @@ function _draw()
 	print("realx: "..pl.realx,7)
 	print("realy: "..pl.realy,7)
 	print("onground: "..tostr(on_ground()),7)]]
-	btns = ""
+	local btns = ""
 	for i = 0,5 do
 		btns ..= btn(i) and buttons[i] or "  "
 	end
@@ -111,42 +108,9 @@ function _update60()
 	end
 end
 
---function update_player()
---
---end
-
 -- will be fancier later?
 function pressed(button)
 	return btnp(button)
-end
-
-function move_player(move_x, move_y)
-	-- x movement
-	pl.realx += move_x
-	while abs(pl.realx - pl.x) > 1 do
-		-- one pixel at a time
-		pl.x +=	sgn(pl.realx - pl.x)
-		if check_collision() then
-			-- undo last step
-			pl.x -=	sgn(pl.realx - pl.x)
-			pl.realx = pl.x
-			pl.speedx = 0
-		end
-	end
-	-- y movement
-	pl.realy += move_y
-	while abs(pl.realy - pl.y) > 1 do
-		pl.y +=	sgn(pl.realy - pl.y)
-		if check_collision() then
-			pl.y -=	sgn(pl.realy - pl.y)
-			pl.realy = pl.y
-			-- bonk if moving up
-			if (pl.speedy < 0) then 
-				sfx(1)
-			end
-			pl.speedy = 0
-		end
-	end
 end
 -->8
 -- helper functions
@@ -161,16 +125,12 @@ function approach(val, target, rate)
 	end
 end
 
---[[
-function xor(x,y)
-	return x!=y
+function is_in_solid(x, y)
+	local mx = flr(x/8)
+	local my = flr(y/8)
+	-- flag 1 means solid
+	return fget(mget(mx, my), 1)
 end
-neither = xor]]
-
-function xnor(x,y)
-	return x==y
-end
-both = xnor
 
 buttons = {
 	[0]="⬅️",
@@ -196,34 +156,6 @@ function spr_outline(n,x,y,w,h,flip_x,flip_y)
 end
 --]]
 -->8
--- collision detection
-
-function is_in_solid(x, y)
-	mx = flr(x/8)
-	my = flr(y/8)
-	-- flag 1 means solid
-	return fget(mget(mx, my), 1)
-end
-
-function check_collision()
-	left, right, top, bottom =
-		pl.x+1, pl.x+6, pl.y+2, pl.y+7
-		
-	return is_in_solid(left, top)
-	 or is_in_solid(left, bottom)
-	 or is_in_solid(right, top)
-	 or is_in_solid(right, bottom)
-end
-
-function on_floor()
-	left, right, bottom = 
-		pl.x+1, pl.x+6, pl.y+7
-	return is_in_solid(left, bottom+1)
-	 or is_in_solid(right, bottom+1)
-end
--- consistency is cringe
-on_ground = on_floor
--->8
 -- actors and spawners
 
 function create_spawner(x, y, id)
@@ -235,10 +167,10 @@ function create_spawner(x, y, id)
 		actor_alive = false,
 		spawn = function(self)
 			return create_actor(
-			 self.x * 8,
-			 self.y * 8,
-			 self.id,
-			 self)
+				self.x * 8,
+				self.y * 8,
+				self.id,
+				self)
 		end
 	}
 	return spawner
@@ -268,9 +200,16 @@ function create_actor(x, y, id, spawner)
 		realy = y,
 		speedx = 0,
 		speedy = 0,
-		-- hitbox
-		w = 8,
-		h = 8,
+		-- hitboxes
+		-- solid hitbox
+		sol_hitbox = 
+			new_hitbox(8, 8, 0, 0),
+		-- hitbox to player
+		pl_hitbox = 
+			new_hitbox(6, 6, 1, 1),
+		-- hitbox to shots
+		sh_hitbox = 
+			new_hitbox(10, 10, -1, -1),
 		-- spawn state
 		spawner = spawner,
 		-- sprite
@@ -280,14 +219,99 @@ function create_actor(x, y, id, spawner)
 		offsetx = 0,
 		offsety = 0,
 		-- methods
-		--function _init(self) end
-		--function _update(self) end
-		--function _draw(self) end
+		-- collision detection
+		check_collision = function(self)
+			local hitbox = self.sol_hitbox
+			local left = 
+				self.x + hitbox.left
+			local right =
+				self.x + hitbox.right
+			local top = 
+				self.y + hitbox.top
+			local bottom =
+				self.y + hitbox.bottom
+			
+			return is_in_solid(left, top)
+				or is_in_solid(left, bottom)
+				or is_in_solid(right, top)
+				or is_in_solid(right, bottom)
+		end,
+		on_ground = function(self)
+			local hitbox = self.sol_hitbox
+			local left = 
+				self.x + hitbox.left
+			local right =
+				self.x + hitbox.right
+			local bottom =
+				self.y + hitbox.bottom
+			return is_in_solid(left, bottom+1)
+				or is_in_solid(right, bottom+1)
+		end,
+		-- movement
+		move_x = function(self, x)
+			self.realx += x
+			while abs(self.realx - self.x) > 1 do
+				-- one pixel at a time
+				self.x += sgn(self.realx - self.x)
+				if self:check_collision() then
+					-- undo last step
+					self.x -= sgn(self.realx - self.x)
+					self.realx = self.x
+					if self.on_col_x != nil then
+						self:on_col_x()
+					else -- default
+						self.speedx = 0
+					end
+				end
+			end
+		end,
+		move_y = function(self, y)
+			self.realy += y
+			while abs(self.realy - self.y) > 1 do
+				-- one pixel at a time
+				self.y += sgn(self.realy - self.y)
+				if self:check_collision() then
+					-- undo last step
+					self.y -= sgn(self.realy - self.y)
+					self.realy = self.y
+					if self.on_col_y != nil then
+						self:on_col_y()
+					else -- default
+						self.speedy = 0
+					end
+				end
+			end
+		end
 	}
 	setmetatable(actor, actormeta)
 	return actor
 end
 
+hitbox_meta = {
+	__index = function(self, key)
+		if key == "left" then
+			return self.x
+		elseif key == "right" then
+			return self.x + self.w - 1
+		elseif key == "top" then
+			return self.y
+		elseif key == "bottom" then
+			return self.y + self.h - 1
+		end
+	end
+}
+
+function new_hitbox(w,h,x,y)
+	local hitbox = {
+		w=w,
+		h=h,
+		x=x,
+		y=y
+	}
+	setmetatable(
+		hitbox, hitbox_meta)
+	return hitbox
+end
 
 -->8
 -- player definition
@@ -297,6 +321,11 @@ function create_player(x, y)
 	pl = pl .. {
 		crouching=false,
 		lookingup=false,
+		-- hitboxes
+		sol_hitbox = 
+			new_hitbox(6, 6, 1, 2),
+		pl_hitbox = nil,
+		sh_hitbox = nil,
 		-- animation state
 		sprite = 1,
 		runtimer = 0,
@@ -320,30 +349,34 @@ function create_player(x, y)
 		-- update methods
 		update = function(self)
 			-- horizontal inputs
-			accel = on_ground()
-			 and self.walkaccel
-			 or self.airaccel
-			if both(btn(⬅️),btn(➡️)) then
-				self.speedx = approach(self.speedx, 0, accel)
+			local accel = self:on_ground()
+				and self.walkaccel
+				or self.airaccel
+			if btn(⬅️) == btn(➡️) then
+				self.speedx = 
+					approach(self.speedx, 0, accel)
 			elseif btn(⬅️) then
-				self.speedx = approach(self.speedx, -self.walkspeed, accel)
+				self.speedx = 
+					approach(self.speedx, -self.walkspeed, accel)
 				if (self.speedx <= 0) self.flipx = true
-		 elseif btn(➡️) then
-				self.speedx = approach(self.speedx, self.walkspeed, accel)
+			elseif btn(➡️) then
+				self.speedx = 
+					approach(self.speedx, self.walkspeed, accel)
 				if (self.speedx >= 0) self.flipx = false
 			end
 			-- vertical inputs
 			self.crouching = false
 			self.lookingup = false
 			if (self.speedx == 0) then
-				if not both(btn(⬇️),btn(⬆️)) then
+				if btn(⬇️) != btn(⬆️) then
 					if (btn(⬇️)) self.crouching = true
 					if (btn(⬆️)) self.lookingup = true
 				end
 			end
-			self.speedx = max(min(self.speedx, self.walkspeed), -self.walkspeed)
+			self.speedx = 
+				max(min(self.speedx, self.walkspeed), -self.walkspeed)
 			-- vertical movement
-			if pressed(🅾️) and on_floor() then
+			if pressed(🅾️) and self:on_ground() then
 				self:jump()
 			end
 			
@@ -354,7 +387,8 @@ function create_player(x, y)
 			end
 			self.speedy = min(self.speedy, self.fallspeed)
 			
-			move_player(self.speedx, self.speedy)
+			self:move_x(self.speedx)
+			self:move_y(self.speedy)
 		end,
 		
 		jump = function(self)
@@ -362,13 +396,20 @@ function create_player(x, y)
 			self.speedy = self.jumpspeed
 		end,
 		
+		on_col_y = function(self)
+			if (self.speedy < 0) then 
+				sfx(1)
+			end
+			self.speedy = 0
+		end,
+		
 		-- rendering code
 		draw = function(self)
-			if not on_floor() then
+			if not self:on_ground() then
 				-- in the air
 				self.sprite = self.speedy < 0
-				 and self.sprites.jump 
-				 or self.sprites.fall
+					and self.sprites.jump 
+					or self.sprites.fall
 				self.runtimer = 0
 				self.yoffset = 0
 			elseif self.speedx == 0 then
