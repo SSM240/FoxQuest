@@ -101,7 +101,7 @@ function draw_level()
 		0, 0,
 		room.w, room.h,
 		0x01)
-	camera(pl.x - 64, 0)
+	camera(pl.x - 60, 0)
 end
 
 
