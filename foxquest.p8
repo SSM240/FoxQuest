@@ -327,7 +327,7 @@ function create_player(x, y)
 		lookingup = false,
 		-- jumping state
 		has_jump2 = true,
-		grace_time = 8,
+		grace_time = 10,
 		grace = 0,
 		-- hitboxes
 		sol_hitbox = 
@@ -343,6 +343,7 @@ function create_player(x, y)
 		airspeed = 1.25,
 		airaccel = 0.25,
 		jumpspeed = -2.9,
+		jump2speed = -2.6,
 		gravity = 0.140,
 		fallspeed = 2.8,
 		run_animrate = 9,
@@ -421,8 +422,13 @@ function create_player(x, y)
 		end,
 		
 		jump = function(self, num)
-			sfx(num - 1)
-			self.speedy = self.jumpspeed
+			if num == 1 then
+				sfx(0)
+				self.speedy = self.jumpspeed
+			elseif num == 2 then
+				sfx(1)
+				self.speedy = self.jump2speed
+			end
 		end,
 		
 		on_col_y = function(self)
