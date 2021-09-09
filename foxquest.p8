@@ -22,8 +22,7 @@ room_info = {
 		x = 0,
 		y = 0,
 		w = 16*4,
-		h = 16,
-		vertical = false
+		h = 16
 	}
 }
 
@@ -64,7 +63,17 @@ end
 
 function _draw()
 	cls(1)
-	camera(pl.x - 60, 0)
+	camera_x = clamp(
+		pl.x - 60,
+		room.x * 8,
+		room.x * 8 + room.w * 8 - 128
+	)
+	camera_y = clamp(
+		pl.y - 60,
+		room.y * 8,
+		room.y * 8 + room.h * 8 - 128
+	)
+	camera(camera_x, camera_y)
 	draw_level()
 	for actor in all(actors) do
 		actor:draw()
@@ -122,6 +131,11 @@ end
 function between(val, _min, _max)
 	return val >= _min
 		and val <= _max
+end
+
+function clamp(val, _min, _max)
+	return
+		max(min(val, _max), _min)
 end
 
 function is_in_solid(x, y)
