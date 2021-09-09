@@ -1,5 +1,5 @@
 pico-8 cartridge // http://www.pico-8.com
-version 32
+version 33
 __lua__
 -- fox quest
 -- by ssm24
@@ -327,8 +327,8 @@ function create_player(x, y)
 		lookingup = false,
 		-- jumping state
 		has_jump2 = true,
-		grace_frames = 8,
-		grace_counter = {},
+		grace_time = 8,
+		grace = 0,
 		-- hitboxes
 		sol_hitbox = 
 			new_hitbox(6, 6, 1, 2),
@@ -388,13 +388,16 @@ function create_player(x, y)
 				end
 			end
 			-- vertical movement
-			self:update_grace()
 			if on_ground then
 				self.has_jump2 = true
+				self.grace = self.grace_time
+			else
+				self.grace =
+					max(self.grace - 1, 0)
 			end
 			if pressed(🅾️) then
 				if self:on_ground()
-						or self:has_grace() then
+						or self.grace > 0 then
 					self:jump(1)
 				elseif self.has_jump2 then
 					self.has_jump2 = false
@@ -427,22 +430,6 @@ function create_player(x, y)
 				sfx(2)
 			end
 			self.speedy = 0
-		end,
-		
-		update_grace = function(self)
-			local grace_counter = 
-				self.grace_counter
-			local grounded = 
-				self:on_ground()
-			add(grace_counter, grounded)
-			if #grace_counter
-				> self.grace_frames then
-				deli(grace_counter, 1)
-			end
-		end,
-		has_grace = function(self)
-			return
-				count(self.grace_counter, true) > 1
 		end,
 		
 		-- rendering code
